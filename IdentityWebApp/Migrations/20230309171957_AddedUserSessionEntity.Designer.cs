@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace IdentityWebApp.Migrations
 {
     [DbContext(typeof(DataContext))]
-    [Migration("20230218154222_initial")]
-    partial class initial
+    [Migration("20230309171957_AddedUserSessionEntity")]
+    partial class AddedUserSessionEntity
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -36,7 +36,7 @@ namespace IdentityWebApp.Migrations
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("int");
 
-                    b.Property<DateTime>("BirthDay")
+                    b.Property<DateTime?>("BirthDay")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("ConcurrencyStamp")
@@ -102,6 +102,31 @@ namespace IdentityWebApp.Migrations
                         .HasFilter("[NormalizedUserName] IS NOT NULL");
 
                     b.ToTable("AspNetUsers", (string)null);
+                });
+
+            modelBuilder.Entity("IdentityWebApp.UserSession", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UserSessions");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole<long>", b =>
@@ -237,6 +262,17 @@ namespace IdentityWebApp.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("IdentityWebApp.UserSession", b =>
+                {
+                    b.HasOne("IdentityWebApp.User", "User")
+                        .WithMany("UserSessions")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<long>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole<long>", null)
@@ -286,6 +322,11 @@ namespace IdentityWebApp.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("IdentityWebApp.User", b =>
+                {
+                    b.Navigation("UserSessions");
                 });
 #pragma warning restore 612, 618
         }

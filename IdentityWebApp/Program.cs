@@ -1,5 +1,7 @@
-using IdentityWebApp;
 using IdentityWebApp.Endpoints;
+using IdentityWebApp.Entities;
+using IdentityWebApp.Repositories;
+using IdentityWebApp.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -20,6 +22,8 @@ builder.Services.AddDbContext<DataContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
 });
 
+builder.Services.AddHostedService<UserSessionCleanerBackgroundService>();
+
 builder.Services.AddIdentity<User, IdentityRole<long>>(options =>
 {
     options.User.RequireUniqueEmail = true;
@@ -33,6 +37,8 @@ builder.Services.AddOptions<CookieAuthenticationOptions>(CookieAuthenticationDef
     {
         options.SessionStore = store;
         options.SlidingExpiration = true;
+        options.Cookie.Name = "My.Cookie";
+        options.ExpireTimeSpan = TimeSpan.FromMinutes(2);
         options.Events.OnRedirectToLogin = (context) =>
         {
             context.Response.StatusCode = 401;

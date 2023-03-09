@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Authentication;
+﻿using IdentityWebApp.Dtos;
+using IdentityWebApp.Entities;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -33,7 +35,7 @@ namespace IdentityWebApp.Endpoints
                             new Claim[]
                             {
                                 new Claim(ClaimTypes.Name, user.FirstName),
-                                new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+                                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                             },
                             CookieAuthenticationDefaults.AuthenticationScheme
                         )
@@ -42,7 +44,6 @@ namespace IdentityWebApp.Endpoints
                     { 
                         IsPersistent = true,
                         AllowRefresh = true,
-                        ExpiresUtc = DateTime.UtcNow.AddMinutes(10),
                     }
                 );
 
