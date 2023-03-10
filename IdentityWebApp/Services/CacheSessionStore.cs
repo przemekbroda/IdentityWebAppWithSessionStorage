@@ -46,6 +46,42 @@ namespace IdentityWebApp.Services
             await _distributedCache.SetStringAsync(key, json, options);
         }
 
+        public async Task<AuthenticationTicket?> RetrieveAsync(string key)
+        {
+            var json = await _distributedCache.GetStringAsync(key);
+
+            if (json is null)
+            {
+                return null;
+            }
+
+            var authenticationTicketData = JsonSerializer.Deserialize<AuthenticationTicketData>(json);
+
+            if (authenticationTicketData is null)
+            {
+                return null;
+            }
+
+            var claims = authenticationTicketData.Claims.Select(claim => new Claim(claim.Type, claim.Value));
+            var claimsIdentity = new ClaimsIdentity(claims, authenticationTicketData.AuthenticationScheme);
+            var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
+            var ticket = new AuthenticationTicket(claimsPrincipal, authenticationTicketData.AuthenticationScheme);
+            ticket.Properties.ExpiresUtc = authenticationTicketData.AuthenticationProperties.ExpiresUtc;
+            ticket.Properties.IssuedUtc = authenticationTicketData.AuthenticationProperties.IssuedUtc;
+            ticket.Properties.AllowRefresh = authenticationTicketData.AuthenticationProperties.AllowRefresh;
+            ticket.Properties.IsPersistent = authenticationTicketData.AuthenticationProperties.IsPersistent;
+
+            return ticket;
+        }
+
+        public async Task<string> StoreAsync(AuthenticationTicket ticket)
+        {
+            var bytes = RandomNumberGenerator.GetBytes(100);
+            var key = KeyPrefix + Convert.ToBase64String(bytes);
+            await RenewAsync(key, ticket);
+            return key;
+        }
+
         private async Task SaveOrUpdateUserSessionData(string key, AuthenticationTicket ticket)
         {
             var userId = ticket.Principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -94,42 +130,6 @@ namespace IdentityWebApp.Services
             }
 
             await dataContext.SaveChangesAsync();
-        }
-
-        public async Task<AuthenticationTicket?> RetrieveAsync(string key)
-        {
-            var json = await _distributedCache.GetStringAsync(key);
-
-            if (json is null)
-            {
-                return null;
-            }
-
-            var authenticationTicketData = JsonSerializer.Deserialize<AuthenticationTicketData>(json);
-
-            if (authenticationTicketData is null)
-            {
-                return null;
-            }
-
-            var claims = authenticationTicketData.Claims.Select(claim => new Claim(claim.Type, claim.Value));
-            var claimsIdentity = new ClaimsIdentity(claims, authenticationTicketData.AuthenticationScheme);
-            var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
-            var ticket = new AuthenticationTicket(claimsPrincipal, authenticationTicketData.AuthenticationScheme);
-            ticket.Properties.ExpiresUtc = authenticationTicketData.AuthenticationProperties.ExpiresUtc;
-            ticket.Properties.IssuedUtc = authenticationTicketData.AuthenticationProperties.IssuedUtc;
-            ticket.Properties.AllowRefresh = authenticationTicketData.AuthenticationProperties.AllowRefresh;
-            ticket.Properties.IsPersistent = authenticationTicketData.AuthenticationProperties.IsPersistent;
-
-            return ticket;
-        }
-
-        public async Task<string> StoreAsync(AuthenticationTicket ticket)
-        {
-            var bytes = RandomNumberGenerator.GetBytes(100);
-            var key = KeyPrefix + Convert.ToBase64String(bytes);
-            await RenewAsync(key, ticket);
-            return key;
         }
 
         private record ClaimsData(string Type, string Value);
