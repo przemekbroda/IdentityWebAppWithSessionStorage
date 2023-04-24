@@ -43,7 +43,7 @@ builder.Services.AddOptions<CookieAuthenticationOptions>(CookieAuthenticationDef
     {
         options.SessionStore = store;
         options.SlidingExpiration = true;
-        options.Cookie.Name = "auth";
+        options.Cookie.Name = builder.Configuration.GetValue<string>("Session:CookieName");
         options.ExpireTimeSpan = TimeSpan.FromMinutes(builder.Configuration.GetValue<double>("Session:SessionDurationInMinutes"));
         options.Events.OnRedirectToLogin = (context) =>
         {
