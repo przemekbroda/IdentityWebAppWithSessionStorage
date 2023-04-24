@@ -7,6 +7,6 @@ namespace IdentityWebApp.Entities
         public required string FirstName { get; set; }
         public required string LastName { get; set; }
         public DateTime? BirthDay { get; set; }
-        public IEnumerable<UserSession>? UserSessions { get; set; }
+        public IList<UserSession> UserSessions { get; set; } = new List<UserSession>();
     }
 }

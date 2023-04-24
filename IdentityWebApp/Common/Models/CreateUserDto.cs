@@ -1,4 +1,4 @@
-﻿namespace IdentityWebApp.Dtos
+﻿namespace IdentityWebApp.Common.Models
 {
     public class CreateUserDto
     {

@@ -1,5 +1,5 @@
-﻿using IdentityWebApp.Entities;
-using IdentityWebApp.Repositories;
+﻿using IdentityWebApp.Common.Interfaces;
+using IdentityWebApp.Entities;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
@@ -36,26 +36,26 @@ namespace IdentityWebApp.Services
 
             await SaveOrUpdateUserSessionData(key, ticket);
 
-            var json = JsonSerializer.Serialize(new AuthenticationTicketData(ticket.Properties, ticket.AuthenticationScheme, claims));
+            var authenticationTicketDataBytes = JsonSerializer.SerializeToUtf8Bytes(new AuthenticationTicketData(ticket.AuthenticationScheme, ticket.Properties, claims));
 
             var options = new DistributedCacheEntryOptions
             {
                 AbsoluteExpiration = expiresUtc,
             };
 
-            await _distributedCache.SetStringAsync(key, json, options);
+            await _distributedCache.SetAsync(key, authenticationTicketDataBytes, options);
         }
 
         public async Task<AuthenticationTicket?> RetrieveAsync(string key)
         {
-            var json = await _distributedCache.GetStringAsync(key);
+            var authenticationTicketDataBytes = await _distributedCache.GetAsync(key);
 
-            if (json is null)
+            if (authenticationTicketDataBytes is null)
             {
                 return null;
             }
 
-            var authenticationTicketData = JsonSerializer.Deserialize<AuthenticationTicketData>(json);
+            var authenticationTicketData = JsonSerializer.Deserialize<AuthenticationTicketData>(authenticationTicketDataBytes);
 
             if (authenticationTicketData is null)
             {
@@ -65,11 +65,7 @@ namespace IdentityWebApp.Services
             var claims = authenticationTicketData.Claims.Select(claim => new Claim(claim.Type, claim.Value));
             var claimsIdentity = new ClaimsIdentity(claims, authenticationTicketData.AuthenticationScheme);
             var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
-            var ticket = new AuthenticationTicket(claimsPrincipal, authenticationTicketData.AuthenticationScheme);
-            ticket.Properties.ExpiresUtc = authenticationTicketData.AuthenticationProperties.ExpiresUtc;
-            ticket.Properties.IssuedUtc = authenticationTicketData.AuthenticationProperties.IssuedUtc;
-            ticket.Properties.AllowRefresh = authenticationTicketData.AuthenticationProperties.AllowRefresh;
-            ticket.Properties.IsPersistent = authenticationTicketData.AuthenticationProperties.IsPersistent;
+            var ticket = new AuthenticationTicket(claimsPrincipal, authenticationTicketData.AuthenticationProperties, authenticationTicketData.AuthenticationScheme);
 
             return ticket;
         }
@@ -82,50 +78,53 @@ namespace IdentityWebApp.Services
             return key;
         }
 
-        private async Task SaveOrUpdateUserSessionData(string key, AuthenticationTicket ticket)
+        private async Task SaveOrUpdateUserSessionData(string sessionId, AuthenticationTicket ticket)
         {
             var scope = _serviceProvider.CreateScope();
-            var dataContext = scope.ServiceProvider.GetService<DataContext>();
+            var dataContext = scope.ServiceProvider.GetService<IApplicationDbContext>();
 
             if (dataContext is null)
             {
                 throw new Exception("DataContext not found");
             }
 
-            var userSessionWithSameSessionId = await dataContext
+            var userSessionInfo = await dataContext
                 .UserSessions
-                .FirstOrDefaultAsync(userSession => userSession.SessionId == key);
+                .FirstOrDefaultAsync(userSession => userSession.SessionId == sessionId);
 
-            if (userSessionWithSameSessionId is null)
+            if (userSessionInfo is null)
             {
                 var userId = ticket.Principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                var userAgent = ticket.Principal.FindFirst(ClaimTypes.System)?.Value;
 
                 if (userId is null)
                 {
                     throw new Exception("User id is not present in claims");
                 }
 
-                userSessionWithSameSessionId = new UserSession
+                userSessionInfo = new UserSession
                 {
                     ExpiresAt = ticket.Properties.ExpiresUtc,
-                    SessionId = key,
+                    SessionId = sessionId,
                     UserId = long.Parse(userId),
+                    UserAgent = userAgent,
                 };
 
-                await dataContext.AddAsync(userSessionWithSameSessionId);
+                await dataContext.UserSessions.AddAsync(userSessionInfo);
             }
             else
             {
-                userSessionWithSameSessionId.ExpiresAt = ticket.Properties.ExpiresUtc;
+                userSessionInfo.ExpiresAt = ticket.Properties.ExpiresUtc;
             }
 
             await dataContext.SaveChangesAsync();
         }
 
         private record ClaimsData(string Type, string Value);
+
         private record AuthenticationTicketData(
-            AuthenticationProperties AuthenticationProperties,
             string AuthenticationScheme,
+            AuthenticationProperties AuthenticationProperties,
             IEnumerable<ClaimsData> Claims
         );
     }

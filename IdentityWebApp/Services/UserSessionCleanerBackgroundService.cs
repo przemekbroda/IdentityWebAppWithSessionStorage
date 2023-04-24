@@ -1,4 +1,4 @@
-﻿using IdentityWebApp.Repositories;
+﻿using IdentityWebApp.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace IdentityWebApp.Services
@@ -21,6 +21,8 @@ namespace IdentityWebApp.Services
             {
                 await DoWork();
             }
+
+            _logger.LogInformation("UserSessionCleanerBackgroundService execution canceled");
         }
 
         private async Task DoWork()
@@ -28,7 +30,7 @@ namespace IdentityWebApp.Services
             _logger.LogInformation("Work started");
 
             using var scope = _serviceProvider.CreateScope();
-            var dataContext = scope.ServiceProvider.GetService<DataContext>();
+            var dataContext = scope.ServiceProvider.GetService<ApplicationDbContext>();
 
             if (dataContext is null) 
             {
@@ -41,7 +43,7 @@ namespace IdentityWebApp.Services
                 .Where(userSession => userSession.ExpiresAt < DateTimeOffset.Now)
                 .ExecuteDeleteAsync();
 
-            _logger.LogInformation("Work in finished");
+            _logger.LogInformation("Work finished");
         }
     }
 }

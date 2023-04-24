@@ -1,6 +1,7 @@
+using IdentityWebApp.Common.Interfaces;
 using IdentityWebApp.Endpoints;
 using IdentityWebApp.Entities;
-using IdentityWebApp.Repositories;
+using IdentityWebApp.Persistence;
 using IdentityWebApp.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
@@ -20,13 +21,13 @@ builder.Services.AddStackExchangeRedisCache(options =>
     options.Configuration = builder.Configuration.GetConnectionString("Redis");
 });
 
-builder.Services.AddDbContext<DataContext>(options =>
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
 });
 
 builder.Services.AddDataProtection()
-    .PersistKeysToDbContext<DataContext>();
+    .PersistKeysToDbContext<ApplicationDbContext>();
 
 builder.Services.AddHostedService<UserSessionCleanerBackgroundService>();
 
@@ -35,16 +36,15 @@ builder.Services.AddIdentity<User, IdentityRole<long>>(options =>
     options.User.RequireUniqueEmail = true;
     options.Password.RequireNonAlphanumeric = true;
 })
-    .AddEntityFrameworkStores<DataContext>();
+    .AddEntityFrameworkStores<ApplicationDbContext>();
 
-builder.Services.AddSingleton<ITicketStore, CacheSessionStore>();
 builder.Services.AddOptions<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme)
     .Configure<ITicketStore>((options, store) =>
     {
         options.SessionStore = store;
         options.SlidingExpiration = true;
         options.Cookie.Name = "My.Cookie";
-        options.ExpireTimeSpan = TimeSpan.FromMinutes(2);
+        options.ExpireTimeSpan = TimeSpan.FromMinutes(builder.Configuration.GetValue<double>("Session:SessionDurationInMinutes"));
         options.Events.OnRedirectToLogin = (context) =>
         {
             context.Response.StatusCode = 401;
@@ -52,6 +52,9 @@ builder.Services.AddOptions<CookieAuthenticationOptions>(CookieAuthenticationDef
         };
 
     });
+
+builder.Services.AddSingleton<ITicketStore, CacheSessionStore>();
+builder.Services.AddScoped<IApplicationDbContext>(serviceProvider => serviceProvider.GetRequiredService<ApplicationDbContext>());
 
 builder.Services.AddAuthentication(options => 
 {
