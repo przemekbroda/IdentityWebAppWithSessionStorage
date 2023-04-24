@@ -22,19 +22,19 @@ namespace IdentityWebApp.Services
             _serviceProvider = serviceProvider;
         }
 
-        public async Task RemoveAsync(string key)
+        public async Task RemoveAsync(string sessionId)
         {
-            await _distributedCache.RemoveAsync(key);
+            await _distributedCache.RemoveAsync(sessionId);
         }
 
-        public async Task RenewAsync(string key, AuthenticationTicket ticket)
+        public async Task RenewAsync(string sessionId, AuthenticationTicket ticket)
         {
             var expiresUtc = ticket.Properties.ExpiresUtc;
             var claims = ticket.Principal
                 .Claims
                 .Select(claim => new ClaimsData(claim.Type, claim.Value));
 
-            await SaveOrUpdateUserSessionData(key, ticket);
+            await SaveOrUpdateUserSessionData(sessionId, ticket);
 
             var authenticationTicketDataBytes = JsonSerializer.SerializeToUtf8Bytes(new AuthenticationTicketData(ticket.AuthenticationScheme, ticket.Properties, claims));
 
@@ -43,7 +43,7 @@ namespace IdentityWebApp.Services
                 AbsoluteExpiration = expiresUtc,
             };
 
-            await _distributedCache.SetAsync(key, authenticationTicketDataBytes, options);
+            await _distributedCache.SetAsync(sessionId, authenticationTicketDataBytes, options);
         }
 
         public async Task<AuthenticationTicket?> RetrieveAsync(string key)
