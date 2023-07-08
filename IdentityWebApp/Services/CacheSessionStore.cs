@@ -46,9 +46,9 @@ namespace IdentityWebApp.Services
             await _distributedCache.SetAsync(sessionId, authenticationTicketDataBytes, options);
         }
 
-        public async Task<AuthenticationTicket?> RetrieveAsync(string key)
+        public async Task<AuthenticationTicket?> RetrieveAsync(string sessionId)
         {
-            var authenticationTicketDataBytes = await _distributedCache.GetAsync(key);
+            var authenticationTicketDataBytes = await _distributedCache.GetAsync(sessionId);
 
             if (authenticationTicketDataBytes is null)
             {

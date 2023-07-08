@@ -35,7 +35,12 @@ namespace IdentityWebApp.Endpoints
                 var claims = await userManager.GetClaimsAsync(user);
 
                 var userClaims = await GenerateUserClaimsListAsync(user, userManager);
-                AddUserAgentToClaimsIfExists(context.Request.Headers.UserAgent.ToString(), userClaims);
+
+                var userAgent = context.Request.Headers.UserAgent.ToString();
+                if (!string.IsNullOrEmpty(userAgent))
+                {
+                    userClaims.Add(new Claim(ClaimTypes.System, userAgent));
+                }
 
                 await context.SignInAsync(
                     CookieAuthenticationDefaults.AuthenticationScheme,
@@ -198,15 +203,18 @@ namespace IdentityWebApp.Endpoints
                     return Results.NoContent();
                 }
 
-                await dataContext.UserSessions.Where(userSession => userSession.UserId == userId).ExecuteDeleteAsync();
-
-                var sessionsIds = userWithSessions
-                    ?.UserSessions
-                    ?.Select(userSession => ticketStore.RemoveAsync(userSession.SessionId));
-
-                if (sessionsIds is not null && sessionsIds.Any())
+                foreach (var userSession in userWithSessions.UserSessions)
                 {
-                    await Task.WhenAll(sessionsIds);
+                    dataContext.UserSessions.Remove(userSession);
+                }
+
+                var chunkedUserSessions = userWithSessions
+                    .UserSessions
+                    .Chunk(20);
+
+                foreach (var chunk in chunkedUserSessions)
+                {
+                    await Task.WhenAll(chunk.Select(userSession => ticketStore.RemoveAsync(userSession.SessionId)));
                 }
 
                 return Results.NoContent();
@@ -229,8 +237,8 @@ namespace IdentityWebApp.Endpoints
                 await dataContext.SaveChangesAsync();
 
                 var sessionsIds = userWithSessions
-                    ?.UserSessions
-                    ?.Select(userSession => ticketStore.RemoveAsync(userSession.SessionId));
+                    .UserSessions
+                    .Select(userSession => ticketStore.RemoveAsync(userSession.SessionId));
 
                 if (sessionsIds is not null && sessionsIds.Any())
                 {
@@ -287,20 +295,24 @@ namespace IdentityWebApp.Endpoints
 
         private static async Task UpdateUserSessionsAsync(ITicketStore cacheSessionStore, IList<UserSession> sessions, IList<Claim> claims)
         {
-            await Task.WhenAll(sessions.Select(async userSession =>
+            await Task.WhenAll(sessions.Select(async session =>
             {
-                var authTicket = await cacheSessionStore.RetrieveAsync(userSession.SessionId);
+                var authTicket = await cacheSessionStore.RetrieveAsync(session.SessionId);
 
                 if (authTicket is null)
                 {
                     return;
                 }
 
-                AddUserAgentToClaimsIfExists(userSession.UserAgent, claims);
+                if (!string.IsNullOrEmpty(session.UserAgent))
+                {
+                    claims.Add(new Claim(ClaimTypes.System, session.UserAgent));
+                }
+
                 var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme));
                 var newAuthTicket = new AuthenticationTicket(principal, authTicket.Properties, authTicket.AuthenticationScheme);
 
-                await cacheSessionStore.RenewAsync(userSession.SessionId, newAuthTicket);
+                await cacheSessionStore.RenewAsync(session.SessionId, newAuthTicket);
             }));
         }
 

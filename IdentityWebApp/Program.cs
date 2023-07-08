@@ -39,12 +39,12 @@ builder.Services.AddIdentity<User, IdentityRole<long>>(options =>
     .AddEntityFrameworkStores<ApplicationDbContext>();
 
 builder.Services.AddOptions<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme)
-    .Configure<ITicketStore>((options, store) =>
+    .Configure<ITicketStore, IConfiguration>((options, store, configuration) =>
     {
         options.SessionStore = store;
         options.SlidingExpiration = true;
         options.Cookie.Name = builder.Configuration.GetValue<string>("Session:CookieName");
-        options.ExpireTimeSpan = TimeSpan.FromMinutes(builder.Configuration.GetValue<double>("Session:SessionDurationInMinutes"));
+        options.ExpireTimeSpan = TimeSpan.FromMinutes(configuration.GetValue<double>("Session:SessionDurationInMinutes"));
         options.Events.OnRedirectToLogin = (context) =>
         {
             context.Response.StatusCode = 401;
@@ -60,10 +60,7 @@ builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-})
-    .AddJwtBearer()
-    .AddCookie();
-
+}).AddCookie();
 
 builder.Services.AddAuthorization();
 
