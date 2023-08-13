@@ -12,14 +12,17 @@ namespace IdentityWebApp.Services
 {
     public class CacheSessionStore : ITicketStore
     {
-        private const string KeyPrefix = "AuthSessionStore-";
         private readonly IDistributedCache _distributedCache;
         private readonly IServiceProvider _serviceProvider;
+        private readonly IHttpContextAccessor _httpContextAccessor;
 
-        public CacheSessionStore(IDistributedCache distributedCache, IServiceProvider serviceProvider)
+        private const string KeyPrefix = "AuthSessionStore-";
+
+        public CacheSessionStore(IDistributedCache distributedCache, IServiceProvider serviceProvider, IHttpContextAccessor httpContextAccessor)
         {
             _distributedCache = distributedCache;
             _serviceProvider = serviceProvider;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         public async Task RemoveAsync(string sessionId)
@@ -95,7 +98,7 @@ namespace IdentityWebApp.Services
             if (userSessionInfo is null)
             {
                 var userId = ticket.Principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                var userAgent = ticket.Principal.FindFirst(ClaimTypes.System)?.Value;
+                var userAgent = _httpContextAccessor.HttpContext?.Request.Headers.UserAgent;
 
                 if (userId is null)
                 {

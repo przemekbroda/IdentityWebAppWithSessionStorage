@@ -7,19 +7,18 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using System.Net;
 
 var builder = WebApplication.CreateBuilder(args);
-
-// Add services to the container.
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-//builder.Services.AddDistributedMemoryCache();
-builder.Services.AddStackExchangeRedisCache(options =>
-{
-    options.Configuration = builder.Configuration.GetConnectionString("Redis");
-});
+builder.Services.AddDistributedMemoryCache();
+
+//builder.Services.AddStackExchangeRedisCache(options =>
+//{
+//    options.Configuration = builder.Configuration.GetConnectionString("Redis");
+//});
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
@@ -45,12 +44,18 @@ builder.Services.AddOptions<CookieAuthenticationOptions>(CookieAuthenticationDef
         options.SlidingExpiration = true;
         options.Cookie.Name = builder.Configuration.GetValue<string>("Session:CookieName");
         options.ExpireTimeSpan = TimeSpan.FromMinutes(configuration.GetValue<double>("Session:SessionDurationInMinutes"));
+        
         options.Events.OnRedirectToLogin = (context) =>
         {
-            context.Response.StatusCode = 401;
+            context.Response.StatusCode = (int)HttpStatusCode.Unauthorized;
             return Task.CompletedTask;
         };
 
+        options.Events.OnRedirectToAccessDenied = (context) =>
+        {
+            context.Response.StatusCode = (int)HttpStatusCode.Forbidden;
+            return Task.CompletedTask;
+        };
     });
 
 builder.Services.AddSingleton<ITicketStore, CacheSessionStore>();
@@ -62,7 +67,10 @@ builder.Services.AddAuthentication(options =>
     options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
 }).AddCookie();
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(config => 
+{
+    config.AddPolicy("admin", builder => builder.RequireAuthenticatedUser().RequireRole("admin"));
+});
 
 var app = builder.Build();
 

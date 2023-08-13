@@ -17,6 +17,7 @@ namespace IdentityWebApp.Services
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+
             while (await _timer.WaitForNextTickAsync(stoppingToken) && !stoppingToken.IsCancellationRequested)
             {
                 await DoWork();

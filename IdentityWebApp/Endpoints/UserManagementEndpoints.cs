@@ -16,7 +16,7 @@ namespace IdentityWebApp.Endpoints
             app.MapGroup("/user").MapUserApi();
             app.MapGroup("/role").MapRoleApi();
 
-            app.MapPost("/authenticate", async (string email, string password, bool shouldGeneratePersistentCookie, SignInManager<User> signInManager, UserManager<User> userManager, HttpContext context) =>
+            app.MapPost("/authenticate", async (string email, string password, SignInManager<User> signInManager, UserManager<User> userManager, HttpContext context) =>
             {
                 var user = await userManager.FindByNameAsync(email);
 
@@ -36,12 +36,6 @@ namespace IdentityWebApp.Endpoints
 
                 var userClaims = await GenerateUserClaimsListAsync(user, userManager);
 
-                var userAgent = context.Request.Headers.UserAgent.ToString();
-                if (!string.IsNullOrEmpty(userAgent))
-                {
-                    userClaims.Add(new Claim(ClaimTypes.System, userAgent));
-                }
-
                 await context.SignInAsync(
                     CookieAuthenticationDefaults.AuthenticationScheme,
                     new ClaimsPrincipal(
@@ -52,7 +46,7 @@ namespace IdentityWebApp.Endpoints
                     ),
                     new AuthenticationProperties
                     {
-                        IsPersistent = shouldGeneratePersistentCookie,
+                        IsPersistent = true, //session token or with end date 
                         AllowRefresh = true,
                     }
                 );
@@ -65,16 +59,11 @@ namespace IdentityWebApp.Endpoints
 
                 return Results.Ok();
             });
-        }
 
-        private static IList<Claim> AddUserAgentToClaimsIfExists(string? userAgent, IList<Claim> userClaims)
-        {
-            if (!string.IsNullOrEmpty(userAgent)) 
+            app.MapGet("/admins-only", () =>
             {
-                userClaims.Add(new Claim(ClaimTypes.System, userAgent));
-            }
-
-            return userClaims;
+                return Results.Ok("Hello admin");
+            }).RequireAuthorization("admin");
         }
 
         private static RouteGroupBuilder MapUserApi(this RouteGroupBuilder builder)
@@ -137,6 +126,32 @@ namespace IdentityWebApp.Endpoints
                 return Results.Ok(roles);
             });
 
+            builder.MapPost("/{userId}/role", async (long userId, string role, IApplicationDbContext dataContext, UserManager<User> userManager, ITicketStore ticketStore) => 
+            {
+                var user = await dataContext
+                    .Users
+                    .Where(user => user.Id == userId)
+                    .Include(user => user.UserSessions)
+                    .FirstOrDefaultAsync();
+
+                if (user is null)
+                {
+                    return Results.NotFound();
+                }
+
+                var result = await userManager.AddToRoleAsync(user, role);
+
+                if (!result.Succeeded)
+                {
+                    return Results.BadRequest();
+                }
+
+                await UpdateUserSessionsWithNewClaimsAsync(ticketStore, user.UserSessions, await GenerateUserClaimsListAsync(user, userManager));
+
+                return Results.NoContent();
+
+            });
+
             builder.MapDelete("/{userId}/role", async (long userId, string[] roles, IApplicationDbContext dataContext, UserManager<User> userManager, ITicketStore ticketStore) =>
             {
                 var userWithSessions = await dataContext
@@ -161,7 +176,7 @@ namespace IdentityWebApp.Endpoints
 
                 if (userSessions is not null && userSessions.Any())
                 {
-                    await UpdateUserSessionsAsync(ticketStore, userSessions, await GenerateUserClaimsListAsync(userWithSessions, userManager));
+                    await UpdateUserSessionsWithNewClaimsAsync(ticketStore, userSessions, await GenerateUserClaimsListAsync(userWithSessions, userManager));
                 }
 
                 return Results.NoContent();
@@ -293,7 +308,7 @@ namespace IdentityWebApp.Endpoints
             return builder;
         }
 
-        private static async Task UpdateUserSessionsAsync(ITicketStore cacheSessionStore, IList<UserSession> sessions, IList<Claim> claims)
+        private static async Task UpdateUserSessionsWithNewClaimsAsync(ITicketStore cacheSessionStore, IList<UserSession> sessions, IList<Claim> claims)
         {
             await Task.WhenAll(sessions.Select(async session =>
             {
@@ -302,11 +317,6 @@ namespace IdentityWebApp.Endpoints
                 if (authTicket is null)
                 {
                     return;
-                }
-
-                if (!string.IsNullOrEmpty(session.UserAgent))
-                {
-                    claims.Add(new Claim(ClaimTypes.System, session.UserAgent));
                 }
 
                 var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme));
@@ -318,7 +328,13 @@ namespace IdentityWebApp.Endpoints
 
         private static async Task<IList<Claim>> GenerateUserClaimsListAsync(User user, UserManager<User> userManager)
         {
-            var claims = (await userManager.GetClaimsAsync(user)) ?? new List<Claim>();
+            var claims = await userManager.GetClaimsAsync(user);
+            var roles = await userManager.GetRolesAsync(user);
+
+            foreach (var role in roles) 
+            {
+                claims.Add(new Claim(ClaimTypes.Role, role));
+            }
 
             claims.Add(new Claim(ClaimTypes.Name, user.FirstName));
             claims.Add(new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()));
