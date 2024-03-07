@@ -25,16 +25,20 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
 });
 
+builder.Services.AddHttpContextAccessor();
+
 builder.Services.AddDataProtection()
     .PersistKeysToDbContext<ApplicationDbContext>();
 
 builder.Services.AddHostedService<UserSessionCleanerBackgroundService>();
 
-builder.Services.AddIdentity<User, IdentityRole<long>>(options =>
+builder.Services.AddIdentityCore<User>(options =>
 {
     options.User.RequireUniqueEmail = true;
     options.Password.RequireNonAlphanumeric = true;
 })
+    .AddSignInManager()
+    .AddRoles<IdentityRole<long>>()
     .AddEntityFrameworkStores<ApplicationDbContext>();
 
 builder.Services.AddOptions<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme)
@@ -61,15 +65,11 @@ builder.Services.AddOptions<CookieAuthenticationOptions>(CookieAuthenticationDef
 builder.Services.AddSingleton<ITicketStore, CacheSessionStore>();
 builder.Services.AddScoped<IApplicationDbContext>(serviceProvider => serviceProvider.GetRequiredService<ApplicationDbContext>());
 
-builder.Services.AddAuthentication(options => 
-{
-    options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-}).AddCookie();
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie();
 
 builder.Services.AddAuthorization(config => 
 {
-    config.AddPolicy("admin", builder => builder.RequireAuthenticatedUser().RequireRole("admin"));
+    config.AddPolicy("admin", builder => builder.RequireAuthenticatedUser().RequireRole("ADMIN"));
 });
 
 var app = builder.Build();
